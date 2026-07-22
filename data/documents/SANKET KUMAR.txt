@@ -1,0 +1,38 @@
+SANKET KUMAR
+Web Developer
+  Ranchi	  +91 9771614499	  kumarsanket520@gmail.com
+CAREER SUMMARY:
+
+Aspiring IT professional fueled by passion, persistence, and a hunger for challenges. Ready to turn coding dreams into reality with hands-on experience in full-stack web development. Eager to contribute and grow in the field of software development..
+WORK EXPERIENCE:
+FunctionUp
+Teaching Assistant | SEPTEMBER, 2022 - JANUARY,2023
+   Learned full stack development and worked on backend projects.   Assisted instructors in teaching coding concepts to students.
+   Developed and reviewed course materials and assignments.
+   Provided support to students during coding sessions and project work.
+  Guided students in deploying web applications using cloud platforms like Google Cloud (GCP) and version control systems like Git and GitHub.
+RELEVANT PROJECTS:
+Music Player
+A simple music player web application built using HTML, CSS, and JavaScript. This project primarily focuses on the design of a music player interface.
+  Features: Search functionality, image carousel, music queue, latest releases, and responsive design.
+   Technologies Used: HTML, CSS, JavaScript, Font Awesome.
+   GitHub: https://github.com/SanketKumarDev/Music-Player-CN.git
+To-Do List
+A minimalistic to-do application built using Node.js, Express, and EJS for templating.
+   Features: Add, categorize, and manage tasks with descriptions, categories, and due dates.
+Clean UI with Bootstrap.
+  Technologies Used: Node.js, Express.js, EJS, Bootstrap, MongoDB (optional).    GitHub: https://github.com/SanketKumarDev/Minimal-Todo-App.git
+
+EDUCATION:
+
+2017 - 2020 | Yogoda Satsanga Mahavidyalaya |Ranchi University
+Bachelor of Commerce
+2023 - 2024 |Coding Ninjas
+Full Stack Web Development
+SKILLS:
+
+Front-end : HTML , CSS , JavaScript , Bootstrap , React.js
+Back-end : Node.js , Express.js , RESTful API , MongoDB , Authentication & Authorization (JWT, OAuth)
+Cloud Computing : Google Cloud Platform (GCP) , Amazon Web Services (AWS)
+Version Control : Git, GitHub
+

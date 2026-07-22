@@ -1,0 +1,10 @@
+[
+  {
+    "question": "What is JWT?",
+    "relevant_documents": ["authentication"]
+  },
+  {
+    "question": "What is Docker?",
+    "relevant_documents": ["docker"]
+  }
+]
