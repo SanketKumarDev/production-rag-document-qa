@@ -1,79 +1,125 @@
-import json
-from pathlib import Path
+import time
 
-from fastapi import APIRouter, HTTPException
-from sentence_transformers import SentenceTransformer
+from fastapi import APIRouter, HTTPException, Request
 
 from app.api.schemas import AskRequest, AskResponse
-from app.config.settings import get_settings
-from app.core.models import DocumentChunk
 from app.generation.citation_validator import enforce_grounding
 from app.generation.context_builder import build_context
-from app.generation.ollama_client import OllamaClient
 from app.generation.prompts import build_prompt
-from app.retrieval.bm25 import BM25Index
-from app.retrieval.hybrid import HybridRetriever
-from app.retrieval.reranker import CrossEncoderReranker
-from app.retrieval.vector_store import VectorStore
 
 router = APIRouter()
-settings = get_settings()
-INDEX_DIR = Path("indexes")
-
-
-def _load_components():
-    chunks_data = json.loads(
-        (INDEX_DIR / "chunks.json").read_text(encoding="utf-8")
-    )
-    chunks = [
-        DocumentChunk(
-            chunk_id=x["chunk_id"],
-            document_id=x["document_id"],
-            text=x["text"],
-            metadata=x["metadata"],
-        )
-        for x in chunks_data
-    ]
-
-    vector = VectorStore(SentenceTransformer(settings.embedding_model))
-    vector.load(INDEX_DIR, chunks)
-
-    bm25 = BM25Index()
-    bm25.load(INDEX_DIR)
-
-    return (
-        HybridRetriever(vector, bm25, settings.rrf_k),
-        CrossEncoderReranker(settings.reranker_model),
-        OllamaClient(settings.ollama_base_url, settings.ollama_model),
-    )
 
 
 @router.get("/health")
-def health():
-    return {"status": "ok", "app": settings.app_name}
+def health(request: Request):
+    rag = request.app.state.rag
+
+    return {
+        "status": "ok" if rag.is_ready() else "starting",
+        "app": rag.settings.app_name,
+    }
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask(request: AskRequest):
-    try:
-        retriever, reranker, llm = _load_components()
+def ask(
+    request: Request,
+    payload: AskRequest,
+):
+    rag = request.app.state.rag
 
-        candidates = retriever.search(
-            request.question,
-            settings.vector_top_k,
-            settings.bm25_top_k,
-            settings.hybrid_top_k,
+    if not rag.is_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="RAG system is still initializing.",
         )
-        results = reranker.rerank(request.question, candidates, request.top_k)
+
+    try:
+        total_start = time.perf_counter()
+
+        # ---------------------------------
+        # 1. Hybrid Retrieval
+        # ---------------------------------
+        retrieval_start = time.perf_counter()
+
+        candidates = rag.retriever.search(
+            payload.question,
+            rag.settings.vector_top_k,
+            rag.settings.bm25_top_k,
+            rag.settings.hybrid_top_k,
+        )
+
+        retrieval_time = time.perf_counter() - retrieval_start
+
+        # ---------------------------------
+        # 2. Cross-Encoder Reranking
+        # ---------------------------------
+        rerank_start = time.perf_counter()
+
+        results = rag.reranker.rerank(
+            payload.question,
+            candidates,
+            payload.top_k,
+        )
+
+        rerank_time = time.perf_counter() - rerank_start
+
+        # ---------------------------------
+        # 3. Build Context
+        # ---------------------------------
+        context_start = time.perf_counter()
+
         context, citations = build_context(results)
 
-        raw_answer = llm.generate(build_prompt(request.question, context))
-        answer, grounded, used_ids = enforce_grounding(
-            raw_answer,
-            {c["id"] for c in citations},
+        context_time = time.perf_counter() - context_start
+
+        # ---------------------------------
+        # 4. LLM Generation
+        # ---------------------------------
+        llm_start = time.perf_counter()
+
+        prompt = build_prompt(
+            payload.question,
+            context,
         )
 
-        used_citations = [c for c in citations if c["id"] in used_ids]
+        raw_answer = rag.llm.generate(prompt)
+
+        llm_time = time.perf_counter() - llm_start
+
+        # ---------------------------------
+        # 5. Citation Validation
+        # ---------------------------------
+        validation_start = time.perf_counter()
+
+        answer, grounded, used_ids = enforce_grounding(
+            raw_answer,
+            {citation["id"] for citation in citations},
+        )
+
+        validation_time = time.perf_counter() - validation_start
+
+        # ---------------------------------
+        # Total
+        # ---------------------------------
+        total_time = time.perf_counter() - total_start
+
+        print("\n" + "=" * 50)
+        print("RAG PERFORMANCE")
+        print("=" * 50)
+        print(f"Retrieval:       {retrieval_time:.3f}s")
+        print(f"Reranking:       {rerank_time:.3f}s")
+        print(f"Context:         {context_time:.3f}s")
+        print(f"LLM Generation:  {llm_time:.3f}s")
+        print(f"Citation Check:  {validation_time:.3f}s")
+        print("-" * 50)
+        print(f"TOTAL:           {total_time:.3f}s")
+        print("=" * 50 + "\n")
+
+        used_citations = [
+            citation
+            for citation in citations
+            if citation["id"] in used_ids
+        ]
 
         return AskResponse(
             answer=answer,
@@ -81,10 +127,18 @@ def ask(request: AskRequest):
             citations=used_citations,
             retrieved_sources=citations,
         )
+
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=503,
-            detail="Indexes are not built. Run: python scripts/ingest.py",
+            detail=(
+                "Indexes are not built. "
+                "Run: python -m scripts.ingest"
+            ),
         ) from exc
+
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        ) from exc
